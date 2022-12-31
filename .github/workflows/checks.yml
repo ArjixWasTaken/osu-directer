@@ -2,20 +2,13 @@ on: push
 name: Clippy check
 jobs:
   clippy_check:
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     strategy:
       fail-fast: false
-      matrix:
-        os: [ windows-latest, macos-latest ]
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install GNU tar # Workaround for https://github.com/actions/cache/issues/403
-        if: runner.os == 'macOS'
-        run: |
-          brew install gnu-tar
-          echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
       - uses: actions/cache@v2
         with:
           path: |

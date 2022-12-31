@@ -7,17 +7,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![cfg_attr(debug_assertions, windows_subsystem = "console")]
 
-mod chrome_local_state;
 mod config;
 
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "macos")]
-use crate::macos as os;
-
-#[cfg(target_os = "windows")]
 mod windows;
-#[cfg(target_os = "windows")]
 use crate::windows as os;
 
 use anyhow::Result;

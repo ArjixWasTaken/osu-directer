@@ -4,7 +4,7 @@ fn main() -> io::Result<()> {
     #[cfg(windows)]
     {
         winres::WindowsResource::new()
-            .set_icon("assets/bichrome_icon.ico")
+            .set_icon("assets/icon.ico")
             .compile()?;
     }
     Ok(())

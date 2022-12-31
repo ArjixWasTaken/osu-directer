@@ -1,4 +1,4 @@
-use crate::config::{Browser, Configuration};
+use crate::config::{Configuration};
 use anyhow::{bail, Context, Result};
 use const_format::concatcp;
 use log::{debug, error, info, trace, warn};
@@ -15,8 +15,8 @@ use winreg::{enums::*, RegKey};
 // How many bytes do we let the log size grow to before we rotate it? We only keep one current and one old log.
 const MAX_LOG_SIZE: u64 = 64 * 1024;
 
-const CANONICAL_NAME: &str = "bichrome.exe";
-const PROGID: &str = "bichromeHTML";
+const CANONICAL_NAME: &str = "osu-directer.exe";
+const PROGID: &str = "osu-directer";
 
 // Configuration for "Default Programs". StartMenuInternet is the key for browsers
 // and they're expected to use the name of the exe as the key.
@@ -28,8 +28,8 @@ const PROGID_PATH: &str = concatcp!(r"SOFTWARE\Classes\", PROGID);
 const REGISTERED_APPLICATIONS_PATH: &str =
     concatcp!(r"SOFTWARE\RegisteredApplications\", DISPLAY_NAME);
 
-const DISPLAY_NAME: &str = "bichrome";
-const DESCRIPTION: &str = "Pick the right Chrome profile for each URL";
+const DISPLAY_NAME: &str = "osu!directer";
+const DESCRIPTION: &str = "fake osu direct";
 
 /// Retrieve an EXE path by looking in the registry for the App Paths entry
 fn get_exe_path(exe_name: &str) -> Result<PathBuf> {
@@ -103,19 +103,8 @@ fn register_urlhandler(extra_args: Option<&str>) -> io::Result<()> {
         // etc, but let's do the most obvious/significant ones.)
         let (dprog_capabilities_urlassociations, _) =
             dprog_capabilites.create_subkey("URLAssociations")?;
-        for protocol in &["bichrome", "ftp", "http", "https", "webcal"] {
-            dprog_capabilities_urlassociations.set_value(protocol, &PROGID)?;
-        }
 
-        // Register for various file types, so that we'll be invoked for file:// URLs for these types (e.g.
-        // by `cargo doc --open`.)
-        let (dprog_capabilities_fileassociations, _) =
-            dprog_capabilites.create_subkey("FileAssociations")?;
-        for filetype in &[
-            ".htm", ".html", ".pdf", ".shtml", ".svg", ".webp", ".xht", ".xhtml",
-        ] {
-            dprog_capabilities_fileassociations.set_value(filetype, &PROGID)?;
-        }
+        dprog_capabilities_urlassociations.set_value("https", &PROGID)?;
 
         let (dprog_defaulticon, _) = dprog.create_subkey("DefaultIcon")?;
         dprog_defaulticon.set_value("", &icon_path)?;
@@ -150,10 +139,8 @@ fn register_urlhandler(extra_args: Option<&str>) -> io::Result<()> {
     {
         let appreg_path = format!(r"{}{}", APPREG_BASE, exe_name);
         let (appreg, _) = hkcu.create_subkey(appreg_path)?;
-        // This is used to resolve "bichrome.exe" -> full path, if needed.
+        // This is used to resolve "osu-directer.exe" -> full path, if needed.
         appreg.set_value("", &exe_path)?;
-        // UseUrl indicates that we don't need the shell to download a file for us -- we can handle direct
-        // HTTP URLs.
         appreg.set_value("UseUrl", &1u32)?;
     }
 
@@ -226,17 +213,11 @@ fn get_local_app_data_path() -> Option<PathBuf> {
     None
 }
 
-/// Find the path to Chrome's "Local State" in the user's local app data folder
-pub fn get_chrome_local_state_path() -> Option<PathBuf> {
-    let app_data_relative = r"Google\Chrome\User Data\Local State";
-    get_local_app_data_path().map(|base| base.join(app_data_relative))
-}
-
 // This is the definition of our command line options
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "bichrome",
-    about = "A program to pick Chrome profile based on the URL opened"
+    name = "osu-directer",
+    about = "fake osu direct lul"
 )]
 struct CommandOptions {
     /// Use verbose logging
@@ -246,7 +227,7 @@ struct CommandOptions {
     #[structopt(long)]
     debug: bool,
 
-    /// Do not launch Chrome, just log what would've been launched
+    /// Do not launch osu, but do everything else
     #[structopt(long)]
     dry_run: bool,
 
@@ -262,9 +243,9 @@ struct CommandOptions {
 enum ExecutionMode {
     /// Open the given URLs in the correct browser
     Open,
-    /// Register bichrome as a valid browser
+    /// Register osu-directer as a valid browser
     Register,
-    /// Remove previous registration of bichrome, if any
+    /// Remove previous registration of osu-directer, if any
     Unregister,
     /// Show application icons (changes a registry key and nothing else, as we don't have icons)
     ShowIcons,
@@ -302,8 +283,8 @@ fn init() -> Result<CommandOptions> {
         LevelFilter::Info
     };
 
-    let log_path = get_exe_relative_path("bichrome.log")?;
-    // Always log to bichrome.log
+    let log_path = get_exe_relative_path("osu-directer.log")?;
+    // Always log to osu-directer.log
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![WriteLogger::new(
         log_level,
         Config::default(),
@@ -326,7 +307,7 @@ fn init() -> Result<CommandOptions> {
 }
 
 fn read_config() -> io::Result<Configuration> {
-    let config_path = get_exe_relative_path("bichrome_config.json")?;
+    let config_path = get_exe_relative_path("osu_directer.json")?;
     // We try to read the config, and otherwise just use an empty one instead.
     debug!("attempting to load config from {}", config_path.display());
     let config = Configuration::read_from_file(&config_path);
@@ -337,7 +318,7 @@ fn read_config() -> io::Result<Configuration> {
         }
         Err(e) => {
             error!("failed to parse config: {:?}", e);
-            warn!("opening URLs without profile");
+            Configuration::write_default(&config_path).expect("Could not write the config file.");
             Configuration::empty()
         }
     })
@@ -405,62 +386,46 @@ pub fn main() -> Result<()> {
             let config = read_config()?;
 
             for url in options.urls {
-                let browser = config.choose_browser(&url)?;
-                let (exe, args) = match &browser {
-                    Browser::Chrome(profile) => {
-                        let mut args = Vec::new();
-                        if let Some(argument) = profile.get_argument()? {
-                            args.push(argument);
+                if config.browser_path == "auto" {
+                    let mut not_found = false;
+                    let browser = get_exe_path("firefox.exe")
+                        .unwrap_or(get_exe_path("chrome.exe")
+                            .unwrap_or(get_exe_path("msedge.exe")
+                                .unwrap_or_else(|x| { not_found = true; PathBuf::new() })));
+                    if not_found {
+                        error!("Couldn't automatically detect the browser!");
+                        return Ok(());
+                    } else {
+                        info!("Automatically found {}!", browser.to_str().unwrap());
+
+                        if options.dry_run {
+                            info!("[dry] would execute {} \"{}\"", browser.to_str().unwrap(), &url);
+                        } else {
+                            Command::new(&browser)
+                                .stdout(Stdio::null())
+                                .stdin(Stdio::null())
+                                .stderr(Stdio::null())
+                                .args(vec![&url])
+                                .spawn()
+                                .with_context(|| {
+                                    format!("Failed to launch browser for URL {}", url)
+                                })?;
                         }
-                        args.push(url.to_string());
-
-                        (get_exe_path("chrome.exe")?, args)
                     }
-                    Browser::Firefox => (get_exe_path("firefox.exe")?, vec![url.to_string()]),
-                    Browser::OsDefault => (get_exe_path("msedge.exe")?, vec![url.to_string()]),
-                    Browser::Edge(profile) => {
-                        let mut args = Vec::new();
-                        if let Some(argument) = profile.get_argument()? {
-                            args.push(argument);
-                        }
-                        args.push(url.to_string());
-
-                        (get_exe_path("msedge.exe")?, args)
-                    }
-                    Browser::Safari => {
-                        bail!("Apple Safari not supported on Windows")
-                    }
-                };
-
-                let commandline = format!("\"{}\" \"{}\"", exe.display(), args.join("\" \""));
-                if options.dry_run {
-                    info!("(dry-run) {}", commandline);
                 } else {
-                    // Allow any process to steal focus from us, so that we will transfer focus "nicely" to
-                    // the browser.
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        AllowSetForegroundWindow, ASFW_ANY,
-                    };
-                    unsafe {
-                        AllowSetForegroundWindow(ASFW_ANY);
+                    if options.dry_run {
+                        info!("[dry] would execute {} \"{}\"", &config.browser_path, &url);
+                    } else {
+                        Command::new(&config.browser_path)
+                            .stdout(Stdio::null())
+                            .stdin(Stdio::null())
+                            .stderr(Stdio::null())
+                            .args(vec![&url])
+                            .spawn()
+                            .with_context(|| {
+                                format!("Failed to launch browser for URL {}", url)
+                            })?;
                     }
-
-                    // Let's not log the URL to the logs by default, so there's not a gross log file
-                    // the user might not be aware of inadvertently 'tracking' their browsing activity.
-                    info!("picked {:?}", &browser);
-                    debug!("launching {}", commandline);
-                    Command::new(&exe)
-                        .stdout(Stdio::null())
-                        .stdin(Stdio::null())
-                        .stderr(Stdio::null())
-                        .args(args)
-                        .spawn()
-                        .with_context(|| {
-                            format!(
-                                "Failed to launch browser {:?} for URL {}, attempted command {}",
-                                &browser, url, commandline
-                            )
-                        })?;
                 }
             }
         }

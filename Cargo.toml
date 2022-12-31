@@ -1,9 +1,9 @@
 [package]
-name = "bichrome"
+name = "osu-directer"
 version = "0.6.0"
-authors = ["Jørgen P. Tjernø <jorgen@tjer.no>"]
+authors = ["ArjixWasTaken", "Jørgen P. Tjernø <jorgen@tjer.no>"]
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 anyhow = "^1"
@@ -16,27 +16,17 @@ structopt = "0.3"
 thiserror = "^1"
 url = "^2.2.0"
 webextension_pattern = { version ="0.3", features = ["serde"] }
-
-[target.'cfg(windows)'.dependencies]
 winreg = "^0.8"
 
-[target.'cfg(windows)'.dependencies.windows]
-version = "^0.35.0"
-features = [
-    "Storage",
-    "Win32_Foundation",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-]
-
-[target.'cfg(target_os = "macos")'.dependencies]
-fruitbasket = "0.10.0"
-
-[target.'cfg(windows)'.build-dependencies]
+windows = { version = "^0.35.0", features = [ "Storage", "Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging" ] }
 winres = "^0.1"
 
+[build-dependencies]
+winres = "^0.1"
+
+
 [package.metadata.winres]
-OriginalFilename = "bichrome.exe"
-FileDescription = "bichrome"
-ProductName = "bichrome"
-LegalCopyright = "© Jørgen Tjernø <jorgen@tjer.no>"
+OriginalFilename = "osu-directer.exe"
+FileDescription = "osu-directer"
+ProductName = "osu!directer"
+LegalCopyright = "© ArjixWasTaken, Jørgen Tjernø <jorgen@tjer.no>"

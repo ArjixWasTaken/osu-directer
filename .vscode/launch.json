@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'bichrome'",
+            "name": "Debug executable 'osu-directer'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=bichrome",
-                    "--package=bichrome"
+                    "--bin=osu-directer",
+                    "--package=osu-directer"
                 ],
                 "filter": {
-                    "name": "bichrome",
+                    "name": "osu-directer",
                     "kind": "bin"
                 }
             },
@@ -28,16 +28,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'bichrome'",
+            "name": "Debug unit tests in executable 'osu-directer'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=bichrome",
-                    "--package=bichrome"
+                    "--bin=osu-directer",
+                    "--package=osu-directer"
                 ],
                 "filter": {
-                    "name": "bichrome",
+                    "name": "osu-directer",
                     "kind": "bin"
                 }
             },

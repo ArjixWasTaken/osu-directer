@@ -8,12 +8,17 @@
 #![cfg_attr(debug_assertions, windows_subsystem = "console")]
 
 mod config;
-
 mod windows;
+
+use std::process::Command;
 use crate::windows as os;
 
 use anyhow::Result;
 
 fn main() -> Result<()> {
-    os::main()
+    os::main()?;
+
+
+    let _ = Command::new("cmd.exe").arg("/c").arg("pause").status();
+    Ok(())
 }

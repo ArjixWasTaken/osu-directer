@@ -1,7 +1,7 @@
 use crate::config::{Configuration};
 use anyhow::{bail, Context, Result};
 use const_format::concatcp;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, trace};
 use simplelog::*;
 use std::{
     fs::{File, OpenOptions},
@@ -9,8 +9,10 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::ops::Index;
 use structopt::StructOpt;
 use winreg::{enums::*, RegKey};
+use regex::Regex;
 
 // How many bytes do we let the log size grow to before we rotate it? We only keep one current and one old log.
 const MAX_LOG_SIZE: u64 = 64 * 1024;
@@ -104,6 +106,7 @@ fn register_urlhandler(extra_args: Option<&str>) -> io::Result<()> {
         let (dprog_capabilities_urlassociations, _) =
             dprog_capabilites.create_subkey("URLAssociations")?;
 
+        dprog_capabilities_urlassociations.set_value("http", &PROGID)?;
         dprog_capabilities_urlassociations.set_value("https", &PROGID)?;
 
         let (dprog_defaulticon, _) = dprog.create_subkey("DefaultIcon")?;
@@ -326,6 +329,7 @@ fn read_config() -> io::Result<Configuration> {
 
 pub fn main() -> Result<()> {
     let options = init()?;
+    let beatmap_regex = Regex::new(r#"https://osu\.ppy\.sh/beatmaps/(\d+)"#).unwrap();
 
     let mode = options.mode.unwrap_or(if options.urls.is_empty() {
         ExecutionMode::Register
@@ -386,6 +390,16 @@ pub fn main() -> Result<()> {
             let config = read_config()?;
 
             for url in options.urls {
+                info!("Got a link! {}", &url);
+                if let Some(beatmap) = beatmap_regex.captures(&url) {
+                    if beatmap.len() < 2 { return Ok(()) }
+
+                    info!("Beatmap ID! {}", beatmap.index(1));
+                    // TODO: Actually download the beatmap!
+
+                    return Ok(());
+                }
+
                 if config.browser_path == "auto" {
                     let mut not_found = false;
                     let browser = get_exe_path("firefox.exe")

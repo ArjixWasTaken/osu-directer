@@ -1,13 +1,9 @@
 #![allow(dead_code)]
 
-use webextension_pattern::Pattern;
-
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{BufReader};
 use std::path::Path;
-use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Configuration {

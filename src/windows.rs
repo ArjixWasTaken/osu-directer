@@ -329,7 +329,7 @@ fn read_config() -> io::Result<Configuration> {
 
 pub fn main() -> Result<()> {
     let options = init()?;
-    let beatmap_regex = Regex::new(r#"https://osu\.ppy\.sh/beatmaps/(\d+)"#).unwrap();
+    let beatmap_regex = Regex::new(r#"^https://osu\.ppy\.sh/beatmaps/(\d+)"#).unwrap();
 
     let mode = options.mode.unwrap_or(if options.urls.is_empty() {
         ExecutionMode::Register
@@ -391,7 +391,7 @@ pub fn main() -> Result<()> {
 
             for url in options.urls {
                 info!("Got a link! {}", &url);
-                if let Some(beatmap) = beatmap_regex.captures(&url) {
+                if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
                     if beatmap.len() < 2 { return Ok(()) }
 
                     info!("Beatmap ID! {}", beatmap.index(1));

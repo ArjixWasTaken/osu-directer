@@ -18,7 +18,7 @@ use anyhow::Result;
 fn main() -> Result<()> {
     os::main()?;
 
-
-    let _ = Command::new("cmd.exe").arg("/c").arg("pause").status();
+    // Keeps the console open to check for crashes.
+    // let _ = Command::new("cmd.exe").arg("/c").arg("pause").status();
     Ok(())
 }

@@ -9,10 +9,12 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::io::{Read, Write};
 use std::ops::Index;
 use structopt::StructOpt;
 use winreg::{enums::*, RegKey};
 use regex::Regex;
+use reqwest::header::ACCEPT;
 
 // How many bytes do we let the log size grow to before we rotate it? We only keep one current and one old log.
 const MAX_LOG_SIZE: u64 = 64 * 1024;
@@ -327,9 +329,51 @@ fn read_config() -> io::Result<Configuration> {
     })
 }
 
+fn download(beatmap_set_id: &str) -> Result<PathBuf> {
+    let download_link = format!("https://api.chimu.moe/v1/download/{}", beatmap_set_id);
+    info!("Download link: {}", download_link);
+
+    if let Ok(res) = reqwest::blocking::Client::new().get(download_link).header(ACCEPT, "application/octet-stream").send() {
+        // info!("Got a response! {}", res.status().as_u16());
+
+        // TODO: Attempt to use a different mirror when this happens.
+        if res.status().as_u16() == 404 {
+            error!("Beatmapset with the id '{}' was not found.", beatmap_set_id);
+            return Err(anyhow::Error::msg("Beatmap not found!"));
+        }
+
+        let bytes = res.bytes()?;
+
+        let download_dir = get_local_app_data_path().ok_or(anyhow::Error::msg("Uhh"))?.join("osu!directer-beatmaps");
+        if !download_dir.is_dir() { std::fs::create_dir_all(&download_dir).expect("Oops!"); }
+
+        let filename = download_dir.join(format!("{}.osz", beatmap_set_id));
+        let mut file = File::create(&filename)?;
+        file.write_all(&*bytes).expect("Shit.");
+
+        return Ok(filename);
+    }
+
+    Err(anyhow::Error::msg("Failed to download the beatmap set."))
+}
+
+fn open_beatmap(osu_path: &String, beatmap: PathBuf) {
+    info!("Launching {}", osu_path);
+
+    Command::new(osu_path)
+        .stdout(Stdio::null())
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .args(vec![&beatmap])
+        .spawn()
+        .with_context(|| {
+            format!("Failed to launch osu with the beatmap {:#?}", beatmap)
+        }).unwrap();
+}
+
 pub fn main() -> Result<()> {
     let options = init()?;
-    let beatmap_regex = Regex::new(r#"^https://osu\.ppy\.sh/beatmaps/(\d+)"#).unwrap();
+    let beatmap_regex = Regex::new(r#"^https://osu\.ppy\.sh/(?:(?:beatmaps)|(?:beatmapsets))/(\d+)"#).unwrap();
 
     let mode = options.mode.unwrap_or(if options.urls.is_empty() {
         ExecutionMode::Register
@@ -389,15 +433,46 @@ pub fn main() -> Result<()> {
         ExecutionMode::Open => {
             let config = read_config()?;
 
+            let mut found = false;
+            let mut path = config.custom_osu_path.unwrap_or("N/A".into());
+            if path == "N/A".to_string() || path.is_empty() {
+                let osu_path = get_exe_path("osu!.exe").unwrap_or_default();
+                if osu_path.exists() {
+                    found = true;
+                    path = osu_path.to_str().unwrap().to_string();
+                } else {
+                    if let Some(local_app_data) = get_local_app_data_path() {
+                        let default_osu_path = local_app_data.join("osu!").join("osu!.exe");
+                        if default_osu_path.exists() {
+                            found = true;
+                            path = default_osu_path.to_str().unwrap().to_string();
+                        }
+                    }
+                }
+            }
+
+            if !found {
+                error!("Couldn't find osu!");
+                return Ok(());
+            }
+
+            info!("osu path! {}", &path);
+
             for url in options.urls {
                 info!("Got a link! {}", &url);
                 if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
                     if beatmap.len() < 2 { return Ok(()) }
 
-                    info!("Beatmap ID! {}", beatmap.index(1));
-                    // TODO: Actually download the beatmap!
+                    let beatmap_id = beatmap.index(1);
+                    if let Ok(downloaded_beatmap) = download(beatmap_id) {
+                        info!("Successfully downloaded the beatmap! {:#?}", downloaded_beatmap);
 
-                    return Ok(());
+                        open_beatmap(&path, downloaded_beatmap);
+                        continue;
+                    } else {
+                        // if the download failed, there is no reason to continue running
+                        return Ok(());
+                    }
                 }
 
                 if config.browser_path == "auto" {
@@ -405,7 +480,7 @@ pub fn main() -> Result<()> {
                     let browser = get_exe_path("firefox.exe")
                         .unwrap_or(get_exe_path("chrome.exe")
                             .unwrap_or(get_exe_path("msedge.exe")
-                                .unwrap_or_else(|x| { not_found = true; PathBuf::new() })));
+                                .unwrap_or_else(|_| { not_found = true; PathBuf::new() })));
                     if not_found {
                         error!("Couldn't automatically detect the browser!");
                         return Ok(());

@@ -1,4 +1,6 @@
-#![deny(clippy::all)]
+#![allow(clippy::all)]
+// I fucking hate you clippy, so fucking aggresive towards the programmer.
+
 // We use the console subsystem in debug builds, but use the Windows subsystem in release
 // builds so we don't have to allocate a console and pop up a command line window.
 // This needs to live in main.rs rather than windows.rs because it needs to be a crate-level
@@ -10,8 +12,8 @@
 mod config;
 mod windows;
 
-use std::process::Command;
 use crate::windows as os;
+use std::process::Command;
 
 use anyhow::Result;
 

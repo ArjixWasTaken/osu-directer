@@ -1,20 +1,20 @@
-use crate::config::{Configuration};
+use crate::config::Configuration;
 use anyhow::{bail, Context, Result};
 use const_format::concatcp;
 use log::{debug, error, info, trace};
+use regex::Regex;
+use reqwest::header::ACCEPT;
 use simplelog::*;
+use std::io::{Read, Write};
+use std::ops::Index;
 use std::{
     fs::{File, OpenOptions},
     io,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-use std::io::{Read, Write};
-use std::ops::Index;
 use structopt::StructOpt;
 use winreg::{enums::*, RegKey};
-use regex::Regex;
-use reqwest::header::ACCEPT;
 
 // How many bytes do we let the log size grow to before we rotate it? We only keep one current and one old log.
 const MAX_LOG_SIZE: u64 = 64 * 1024;
@@ -220,10 +220,7 @@ fn get_local_app_data_path() -> Option<PathBuf> {
 
 // This is the definition of our command line options
 #[derive(Debug, StructOpt)]
-#[structopt(
-    name = "osu-directer",
-    about = "fake osu direct lul"
-)]
+#[structopt(name = "osu-directer", about = "fake osu direct lul")]
 struct CommandOptions {
     /// Use verbose logging
     #[structopt(short, long)]
@@ -329,29 +326,92 @@ fn read_config() -> io::Result<Configuration> {
     })
 }
 
-fn download(beatmap_set_id: &str) -> Result<PathBuf> {
-    let download_link = format!("https://api.chimu.moe/v1/download/{}", beatmap_set_id);
-    info!("Download link: {}", download_link);
+fn try_download_chimu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBuf> {
+    let download_link = format!("https://api.chimu.moe/v1/download/{}", beatmapset_id);
+    info!(
+        "    Attempting to download from chimu.moe - {}",
+        download_link
+    );
 
-    if let Ok(res) = reqwest::blocking::Client::new().get(download_link).header(ACCEPT, "application/octet-stream").send() {
-        // info!("Got a response! {}", res.status().as_u16());
-
-        // TODO: Attempt to use a different mirror when this happens.
-        if res.status().as_u16() == 404 {
-            error!("Beatmapset with the id '{}' was not found.", beatmap_set_id);
-            return Err(anyhow::Error::msg("Beatmap not found!"));
+    if let Ok(res) = reqwest::blocking::Client::new()
+        .get(download_link)
+        .header(ACCEPT, "application/octet-strean")
+        .send()
+    {
+        if res.status().as_u16() != 200 {
+            error!(
+                "    Failed to download from chimu.moe - {}",
+                res.status().to_string()
+            );
+            return Err(anyhow::Error::msg("Failed to download beatmap."));
         }
 
         let bytes = res.bytes()?;
+        let filename = download_dir.join(format!("{}_chimu.osz", beatmapset_id));
+        File::create(&filename)?.write_all(&bytes).expect("Shit");
 
-        let download_dir = get_local_app_data_path().ok_or(anyhow::Error::msg("Uhh"))?.join("osu!directer-beatmaps");
-        if !download_dir.is_dir() { std::fs::create_dir_all(&download_dir).expect("Oops!"); }
-
-        let filename = download_dir.join(format!("{}.osz", beatmap_set_id));
-        let mut file = File::create(&filename)?;
-        file.write_all(&*bytes).expect("Shit.");
+        info!("    Successfully downloaded beatmap from chimu.moe!");
 
         return Ok(filename);
+    } else {
+        error!("    Failed to connect to chimu.moe, check your internet connection.")
+    }
+
+    Err(anyhow::Error::msg("Could not download beatmap."))
+}
+
+fn try_download_kitsu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBuf> {
+    let download_link = format!("https://kitsu.moe/api/d/{}", beatmapset_id);
+    info!(
+        "    Attempting to download from kitsu.moe - {}",
+        download_link
+    );
+
+    if let Ok(res) = reqwest::blocking::Client::new()
+        .get(download_link)
+        .header(ACCEPT, "application/octet-strean")
+        .send()
+    {
+        if res.status().as_u16() != 200 {
+            error!(
+                "    Failed to download from kitsu.moe - {}",
+                res.status().to_string()
+            );
+            return Err(anyhow::Error::msg("Failed to download beatmap."));
+        }
+
+        let bytes = res.bytes()?;
+        let filename = download_dir.join(format!("{}_kitsu.osz", beatmapset_id));
+        File::create(&filename)?.write_all(&bytes).expect("Shit");
+
+        info!("    Successfully downloaded beatmap from kitsu.moe!");
+
+        return Ok(filename);
+    } else {
+        error!("   Failed to connect to kitsu.moe, check your internet connection.")
+    }
+
+    Err(anyhow::Error::msg("Could not download beatmap."))
+}
+
+fn download(beatmap_set_id: &str) -> Result<PathBuf> {
+    let download_dir = get_local_app_data_path()
+        .ok_or(anyhow::Error::msg(
+            "Couldn't find %localappdata%, which is impossible...",
+        ))?
+        .join("osu!directer-beatmaps");
+
+    if !download_dir.is_dir() {
+        std::fs::create_dir_all(&download_dir)
+            .expect("Couldn't make a directory in %localappdata%, which is impossible?");
+    }
+
+    if let Ok(chimu) = try_download_chimu(&beatmap_set_id, &download_dir) {
+        return Ok(chimu);
+    }
+
+    if let Ok(kitsu) = try_download_kitsu(&beatmap_set_id, &download_dir) {
+        return Ok(kitsu);
     }
 
     Err(anyhow::Error::msg("Failed to download the beatmap set."))
@@ -366,14 +426,51 @@ fn open_beatmap(osu_path: &String, beatmap: PathBuf) {
         .stderr(Stdio::null())
         .args(vec![&beatmap])
         .spawn()
-        .with_context(|| {
-            format!("Failed to launch osu with the beatmap {:#?}", beatmap)
-        }).unwrap();
+        .with_context(|| format!("Failed to launch osu with the beatmap {:#?}", beatmap))
+        .unwrap();
+}
+
+fn open_link(browser_path: String, url: &String) -> Result<()> {
+    info!("Opening link in browser! {}", url);
+
+    if browser_path == "auto" {
+        let mut not_found = false;
+        let browser = get_exe_path("firefox.exe").unwrap_or(get_exe_path("chrome.exe").unwrap_or(
+            get_exe_path("msedge.exe").unwrap_or_else(|_| {
+                not_found = true;
+                PathBuf::new()
+            }),
+        ));
+        if not_found {
+            error!("Couldn't automatically detect the browser!");
+            return Ok(());
+        } else {
+            info!("Automatically found {}!", browser.to_str().unwrap());
+
+            Command::new(&browser)
+                .stdout(Stdio::null())
+                .stdin(Stdio::null())
+                .stderr(Stdio::null())
+                .args(vec![url])
+                .spawn()
+                .with_context(|| format!("Failed to launch browser for URL {}", url))?;
+        }
+    } else {
+        Command::new(browser_path)
+            .stdout(Stdio::null())
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .args(vec![url])
+            .spawn()
+            .with_context(|| format!("Failed to launch browser for URL {}", url))?;
+    }
+    Ok(())
 }
 
 pub fn main() -> Result<()> {
     let options = init()?;
-    let beatmap_regex = Regex::new(r#"^https://osu\.ppy\.sh/(?:(?:beatmaps)|(?:beatmapsets))/(\d+)"#).unwrap();
+    let beatmap_regex =
+        Regex::new(r#"^https://osu\.ppy\.sh/((?:beatmaps)|(?:beatmapsets))/(\d+)"#).unwrap();
 
     let mode = options.mode.unwrap_or(if options.urls.is_empty() {
         ExecutionMode::Register
@@ -432,6 +529,7 @@ pub fn main() -> Result<()> {
         }
         ExecutionMode::Open => {
             let config = read_config()?;
+            let client = reqwest::blocking::Client::new();
 
             let mut found = false;
             let mut path = config.custom_osu_path.unwrap_or("N/A".into());
@@ -453,72 +551,55 @@ pub fn main() -> Result<()> {
 
             if !found {
                 error!("Couldn't find osu!");
-                return Ok(());
             }
-
             info!("osu path! {}", &path);
 
             for url in options.urls {
+                if !found {
+                    open_link(config.browser_path.clone(), &url)?;
+                    continue;
+                }
+
                 info!("Got a link! {}", &url);
                 if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
-                    if beatmap.len() < 2 { return Ok(()) }
+                    if beatmap.len() < 2 {
+                        open_link(config.browser_path.clone(), &url)?;
+                        continue;
+                    }
 
-                    let beatmap_id = beatmap.index(1);
-                    if let Ok(downloaded_beatmap) = download(beatmap_id) {
-                        info!("Successfully downloaded the beatmap! {:#?}", downloaded_beatmap);
+                    let mut beatmap_id = beatmap.index(2).to_string();
+                    if beatmap.index(1).eq("beatmaps") {
+                        let head = client.head(&url).send()?;
+
+                        if head.status().is_success() {
+                            info!("Got redirected!! {}", head.url());
+                            let result = beatmap_regex.captures(head.url().as_str()).unwrap();
+                            if result.len() < 2 {
+                                open_link(config.browser_path.clone(), &head.url().to_string())?;
+                                continue;
+                            }
+
+                            beatmap_id = result.index(2).to_string();
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    if let Ok(downloaded_beatmap) = download(beatmap_id.as_str()) {
+                        info!("Saved the beatmap to: {:#?}", downloaded_beatmap);
 
                         open_beatmap(&path, downloaded_beatmap);
                         continue;
                     } else {
                         // if the download failed, there is no reason to continue running
-                        return Ok(());
-                    }
-                }
-
-                if config.browser_path == "auto" {
-                    let mut not_found = false;
-                    let browser = get_exe_path("firefox.exe")
-                        .unwrap_or(get_exe_path("chrome.exe")
-                            .unwrap_or(get_exe_path("msedge.exe")
-                                .unwrap_or_else(|_| { not_found = true; PathBuf::new() })));
-                    if not_found {
-                        error!("Couldn't automatically detect the browser!");
-                        return Ok(());
-                    } else {
-                        info!("Automatically found {}!", browser.to_str().unwrap());
-
-                        if options.dry_run {
-                            info!("[dry] would execute {} \"{}\"", browser.to_str().unwrap(), &url);
-                        } else {
-                            Command::new(&browser)
-                                .stdout(Stdio::null())
-                                .stdin(Stdio::null())
-                                .stderr(Stdio::null())
-                                .args(vec![&url])
-                                .spawn()
-                                .with_context(|| {
-                                    format!("Failed to launch browser for URL {}", url)
-                                })?;
-                        }
+                        open_link(config.browser_path.clone(), &url)?;
+                        continue;
                     }
                 } else {
-                    if options.dry_run {
-                        info!("[dry] would execute {} \"{}\"", &config.browser_path, &url);
-                    } else {
-                        Command::new(&config.browser_path)
-                            .stdout(Stdio::null())
-                            .stdin(Stdio::null())
-                            .stderr(Stdio::null())
-                            .args(vec![&url])
-                            .spawn()
-                            .with_context(|| {
-                                format!("Failed to launch browser for URL {}", url)
-                            })?;
-                    }
+                    open_link(config.browser_path.clone(), &url)?;
                 }
             }
         }
     }
-
     Ok(())
 }

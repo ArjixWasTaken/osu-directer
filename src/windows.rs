@@ -540,7 +540,6 @@ pub fn main() -> Result<()> {
                         Some(osu_path)
                     } else if let Some(local_app_data) = get_local_app_data_path() {
                         let default_osu_path = local_app_data.join("osu!/osu!.exe");
-
                         default_osu_path.exists().then_some(default_osu_path)
                     } else {
                         None

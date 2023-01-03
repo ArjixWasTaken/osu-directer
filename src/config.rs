@@ -14,6 +14,13 @@ pub struct Configuration {
 }
 
 impl Configuration {
+    pub fn empty() -> Self {
+        Self {
+            browser_path: None,
+            custom_osu_path: None,
+        }
+    }
+
     pub fn read_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Configuration> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);

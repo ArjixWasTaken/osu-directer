@@ -6,7 +6,7 @@ use regex::Regex;
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT;
 use simplelog::*;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::ops::Index;
 use std::{
     fs::{File, OpenOptions},
@@ -263,9 +263,9 @@ fn get_exe_relative_path(filename: &str) -> io::Result<PathBuf> {
 }
 
 fn rotate_and_open_log(log_path: &Path) -> Result<File, io::Error> {
-    if let Ok(log_info) = std::fs::metadata(&log_path) {
+    if let Ok(log_info) = std::fs::metadata(log_path) {
         if log_info.len() > MAX_LOG_SIZE
-            && std::fs::rename(&log_path, log_path.with_extension("log.old")).is_err()
+            && std::fs::rename(log_path, log_path.with_extension("log.old")).is_err()
             && std::fs::remove_file(log_path).is_err()
         {
             return File::create(log_path);
@@ -321,8 +321,8 @@ fn read_config() -> io::Result<Configuration> {
         }
         Err(e) => {
             error!("failed to parse config: {:?}", e);
-            Configuration::write_default(&config_path).expect("Could not write the config file.");
-            Configuration::empty()
+
+            Configuration::write_default(&config_path).expect("Could not write the config file.")
         }
     })
 }
@@ -405,9 +405,7 @@ fn try_download_kitsu(
 
 fn download(client: &Client, beatmap_set_id: &str) -> Result<PathBuf> {
     let download_dir = get_local_app_data_path()
-        .ok_or(anyhow::Error::msg(
-            "Couldn't find %localappdata%, which is impossible...",
-        ))?
+        .ok_or_else(|| anyhow::Error::msg("Couldn't find %localappdata%, which is impossible..."))?
         .join("osu!directer-beatmaps");
 
     if !download_dir.is_dir() {
@@ -439,6 +437,7 @@ fn open_beatmap(osu_path: &PathBuf, beatmap: PathBuf) -> Result<()> {
 
     Ok(())
 }
+
 
 fn open_link(browser_path: &mut Option<PathBuf>, url: &str) -> Result<()> {
     info!("Opening link in browser! {}", url);
@@ -548,8 +547,7 @@ pub fn main() -> Result<()> {
                     if let Some(osu_path) = get_exe_path("osu!.exe").filter(|path| path.exists()) {
                         Some(osu_path)
                     } else if let Some(local_app_data) = get_local_app_data_path() {
-                        let mut default_osu_path = local_app_data;
-                        default_osu_path.push("osu!/osu!.exe");
+                        let default_osu_path = local_app_data.join("osu!/osu!.exe");
 
                         default_osu_path.exists().then_some(default_osu_path)
                     } else {
@@ -571,7 +569,7 @@ pub fn main() -> Result<()> {
 
                 info!("Got a link! {}", &url);
 
-                if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
+                if let Some(beatmap) = beatmap_regex.captures(url.trim()) {
                     if beatmap.len() < 2 {
                         open_link(&mut browser_path, &url)?;
                         continue;
@@ -603,6 +601,7 @@ pub fn main() -> Result<()> {
                     } else {
                         // if the download failed, there is no reason to continue running
                         open_link(&mut browser_path, &url)?;
+                        continue;
                     }
                 } else {
                     open_link(&mut browser_path, &url)?;

@@ -13,7 +13,6 @@ mod config;
 mod windows;
 
 use crate::windows as os;
-use std::process::Command;
 
 use anyhow::Result;
 
@@ -21,6 +20,6 @@ fn main() -> Result<()> {
     os::main()?;
 
     // Keeps the console open to check for crashes.
-    // let _ = Command::new("cmd.exe").arg("/c").arg("pause").status();
+    // let _ = std::process::Command::new("cmd.exe").arg("/c").arg("pause").status();
     Ok(())
 }

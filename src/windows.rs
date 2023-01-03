@@ -320,8 +320,8 @@ fn read_config() -> io::Result<Configuration> {
         }
         Err(e) => {
             error!("failed to parse config: {:?}", e);
-            Configuration::write_default(&config_path).expect("Could not write the config file.");
-            Configuration::empty()
+
+            Configuration::write_default(&config_path).expect("Could not write the config file.")
         }
     })
 }
@@ -539,9 +539,7 @@ pub fn main() -> Result<()> {
                     if let Some(osu_path) = get_exe_path("osu!.exe").filter(|path| path.exists()) {
                         Some(osu_path)
                     } else if let Some(local_app_data) = get_local_app_data_path() {
-                        let mut default_osu_path = local_app_data;
-                        default_osu_path.push("osu!/osu!.exe");
-
+                        let default_osu_path = local_app_data.join("osu!/osu!.exe");
                         default_osu_path.exists().then_some(default_osu_path)
                     } else {
                         None

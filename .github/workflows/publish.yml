@@ -28,13 +28,12 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Archive EXE and PDB
+      - name: Archive EXE
         uses: actions/upload-artifact@v2
         with:
           name: ${{ runner.os }}-release
           path: |
             target/release/osu-directer.exe
-            target/release/osu-directer.pdb
 
   create_release:
     name: Publish release
@@ -59,10 +58,10 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          draft: true
+          draft: false
           prerelease: false
 
-      - name: Upload Release Asset (Windows EXE)
+      - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,14 +69,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
           asset_path: dist/Windows-release/osu-directer.exe
           asset_name: osu-directer-win64.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload Release Asset (Windows PDB)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: dist/Windows-release/osu-directer.pdb
-          asset_name: osu-directer-win64.pdb
           asset_content_type: application/octet-stream

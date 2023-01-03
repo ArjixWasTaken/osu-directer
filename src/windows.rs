@@ -438,7 +438,6 @@ fn open_beatmap(osu_path: &PathBuf, beatmap: PathBuf) -> Result<()> {
     Ok(())
 }
 
-
 fn open_link(browser_path: &mut Option<PathBuf>, url: &str) -> Result<()> {
     info!("Opening link in browser! {}", url);
 
@@ -476,7 +475,7 @@ fn open_link(browser_path: &mut Option<PathBuf>, url: &str) -> Result<()> {
 pub fn main() -> Result<()> {
     let options = init()?;
     let beatmap_regex =
-        Regex::new(r#"^https://osu\.ppy\.sh/((?:beatmaps)|(?:beatmapsets))/(\d+)"#).unwrap();
+        Regex::new(r#"^https?://osu\.ppy\.sh/((?:beatmaps)|(?:beatmapsets)|b)/(\d+)"#).unwrap();
 
     let mode = options.mode.unwrap_or(if options.urls.is_empty() {
         ExecutionMode::Register
@@ -576,7 +575,13 @@ pub fn main() -> Result<()> {
                     }
 
                     let mut beatmap_id = beatmap.index(2).to_string();
-                    if beatmap.index(1).eq("beatmaps") {
+
+                    // The following links, point to a beatmap diff, not the beatmap itself
+                    //  - http://osu.ppy.sh/b/1473299
+                    //  - http://osu.ppy.sh/beatmaps/1473299
+                    //
+                    // So we just make a head request, to get the beatmap id from the redirected url.
+                    if vec!["b", "beatmaps"].contains(&beatmap.index(1)) {
                         let head = client.head(&url).send()?;
 
                         if !head.status().is_success() {

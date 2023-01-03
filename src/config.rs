@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Configuration {
     #[serde(with = "serde_path")]
     pub browser_path: Option<PathBuf>,
@@ -14,24 +14,20 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    pub fn empty() -> Self {
-        Self {
-            browser_path: None,
-            custom_osu_path: None,
-        }
-    }
-
     pub fn read_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Configuration> {
-        let file = File::open(path).map_err(|x| x)?;
+        let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let configuration = serde_json::from_reader(reader).map_err(|x| x)?;
+        let configuration = serde_json::from_reader(reader)?;
+
         Ok(configuration)
     }
 
-    pub fn write_default<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
-        std::fs::write(path, serde_json::to_string(&Configuration::empty())?)?;
+    pub fn write_default<P: AsRef<Path>>(path: P) -> std::io::Result<Configuration> {
+        let config = Configuration::default();
+        let file = File::create(path)?;
+        serde_json::to_writer_pretty(file, &config)?;
 
-        Ok(())
+        Ok(config)
     }
 }
 

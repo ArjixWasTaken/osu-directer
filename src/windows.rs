@@ -320,8 +320,8 @@ fn read_config() -> io::Result<Configuration> {
         }
         Err(e) => {
             error!("failed to parse config: {:?}", e);
-            Configuration::write_default(&config_path).expect("Could not write the config file.");
-            Configuration::empty()
+
+            Configuration::write_default(&config_path).expect("Could not write the config file.")
         }
     })
 }

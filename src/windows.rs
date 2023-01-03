@@ -431,10 +431,28 @@ fn open_beatmap(osu_path: &PathBuf, beatmap: PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn open_link(browser_path: &PathBuf, url: &String) -> Result<()> {
+fn open_link(browser_path: &mut Option<PathBuf>, url: &String) -> Result<()> {
     info!("Opening link in browser! {}", url);
 
-    Command::new(browser_path)
+    let browser_path = match browser_path {
+        Some(path) => path,
+        None => {
+            let browser = get_exe_path("firefox.exe")
+                .or_else(|| get_exe_path("chrome.exe"))
+                .or_else(|| get_exe_path("msedge.exe"));
+
+            let Some(path) = browser else {
+                error!("Couldn't automatically detect the browser!");
+                return Ok(());
+            };
+
+            info!("Automatically found {:?}!", path);
+
+            browser_path.insert(path)
+        }
+    };
+
+    Command::new(&*browser_path)
         .stdout(Stdio::null())
         .stdin(Stdio::null())
         .stderr(Stdio::null())
@@ -509,7 +527,7 @@ pub fn main() -> Result<()> {
         }
         ExecutionMode::Open => {
             let Configuration {
-                browser_path,
+                mut browser_path,
                 custom_osu_path,
             } = read_config()?;
 
@@ -536,27 +554,9 @@ pub fn main() -> Result<()> {
                 None => error!("Couldn't find osu!"),
             }
 
-            let browser_path = match browser_path {
-                Some(path) => path,
-                None => {
-                    let browser = get_exe_path("firefox.exe")
-                        .or_else(|| get_exe_path("chrome.exe"))
-                        .or_else(|| get_exe_path("msedge.exe"));
-
-                    let Some(path) = browser else {
-                        error!("Couldn't automatically detect the browser!");
-                        return Ok(());
-                    };
-
-                    info!("Automatically found {:?}!", path);
-
-                    path
-                }
-            };
-
             for url in options.urls {
                 let Some(ref osu_path) = osu_path else {
-                    open_link(&browser_path, &url)?;
+                    open_link(&mut browser_path, &url)?;
                     continue;
                 };
 
@@ -564,7 +564,7 @@ pub fn main() -> Result<()> {
 
                 if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
                     if beatmap.len() < 2 {
-                        open_link(&browser_path, &url)?;
+                        open_link(&mut browser_path, &url)?;
                         continue;
                     }
 
@@ -577,7 +577,7 @@ pub fn main() -> Result<()> {
                             let result = beatmap_regex.captures(head.url().as_str()).unwrap();
 
                             if result.len() < 2 {
-                                open_link(&browser_path, &head.url().to_string())?;
+                                open_link(&mut browser_path, &head.url().to_string())?;
                                 continue;
                             }
 
@@ -594,11 +594,11 @@ pub fn main() -> Result<()> {
                         continue;
                     } else {
                         // if the download failed, there is no reason to continue running
-                        open_link(&browser_path, &url)?;
+                        open_link(&mut browser_path, &url)?;
                         continue;
                     }
                 } else {
-                    open_link(&browser_path, &url)?;
+                    open_link(&mut browser_path, &url)?;
                 }
             }
         }

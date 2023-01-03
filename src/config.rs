@@ -60,26 +60,3 @@ mod serde_path {
         }
     }
 }
-
-mod serde_path {
-    use std::path::PathBuf;
-
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<PathBuf>, D::Error> {
-        let path = <Option<String> as Deserialize>::deserialize(d)?;
-
-        if let Some("auto" | "") = path.as_deref() {
-            Ok(None)
-        } else {
-            Ok(path.map(PathBuf::from))
-        }
-    }
-
-    pub fn serialize<S: Serializer>(path: &Option<PathBuf>, s: S) -> Result<S::Ok, S::Error> {
-        match path {
-            Some(path) => s.serialize_some(path),
-            None => s.serialize_str("auto"),
-        }
-    }
-}

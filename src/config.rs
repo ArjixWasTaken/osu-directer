@@ -53,9 +53,3 @@ mod serde_path {
         }
     }
 }
-
-mod serde_path {
-    use std::path::PathBuf;
-
-    use serde::{Deserialize, Deserializer, Serializer};
-}

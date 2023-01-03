@@ -36,20 +36,20 @@ const DISPLAY_NAME: &str = "osu!directer";
 const DESCRIPTION: &str = "fake osu direct";
 
 /// Retrieve an EXE path by looking in the registry for the App Paths entry
-fn get_exe_path(exe_name: &str) -> Result<PathBuf> {
+fn get_exe_path(exe_name: &str) -> Option<PathBuf> {
     for root_name in &[HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
         let root = RegKey::predef(*root_name);
         if let Ok(subkey) = root.open_subkey(format!("{}{}", APPREG_BASE, exe_name)) {
             if let Ok(value) = subkey.get_value::<String, _>("") {
                 let path = PathBuf::from(value);
                 if path.is_file() {
-                    return Ok(path);
+                    return Some(path);
                 }
             }
         }
     }
 
-    bail!("Could not find path for {}", exe_name);
+    None
 }
 
 /// Register associations with Windows for being a browser
@@ -417,53 +417,51 @@ fn download(beatmap_set_id: &str) -> Result<PathBuf> {
     Err(anyhow::Error::msg("Failed to download the beatmap set."))
 }
 
-fn open_beatmap(osu_path: &String, beatmap: PathBuf) {
-    info!("Launching {}", osu_path);
+fn open_beatmap(osu_path: &PathBuf, beatmap: PathBuf) -> Result<()> {
+    info!("Launching osu! at {:?}", osu_path);
 
     Command::new(osu_path)
         .stdout(Stdio::null())
         .stdin(Stdio::null())
         .stderr(Stdio::null())
-        .args(vec![&beatmap])
+        .arg(&beatmap)
         .spawn()
-        .with_context(|| format!("Failed to launch osu with the beatmap {:#?}", beatmap))
-        .unwrap();
+        .with_context(|| format!("Failed to launch osu with the beatmap {:#?}", beatmap))?;
+
+    Ok(())
 }
 
-fn open_link(browser_path: String, url: &String) -> Result<()> {
+fn open_link(browser_path: &mut Option<PathBuf>, url: &String) -> Result<()> {
     info!("Opening link in browser! {}", url);
 
-    if browser_path == "auto" {
-        let mut not_found = false;
-        let browser = get_exe_path("firefox.exe").unwrap_or(get_exe_path("chrome.exe").unwrap_or(
-            get_exe_path("msedge.exe").unwrap_or_else(|_| {
-                not_found = true;
-                PathBuf::new()
-            }),
-        ));
-        if not_found {
-            error!("Couldn't automatically detect the browser!");
-            return Ok(());
-        } else {
-            info!("Automatically found {}!", browser.to_str().unwrap());
+    let browser_path = match browser_path {
+        Some(path) => path,
+        None => {
+            let browser = get_exe_path("firefox.exe")
+                .or_else(|| get_exe_path("chrome.exe"))
+                .or_else(|| get_exe_path("msedge.exe"));
 
-            Command::new(&browser)
-                .stdout(Stdio::null())
-                .stdin(Stdio::null())
-                .stderr(Stdio::null())
-                .args(vec![url])
-                .spawn()
-                .with_context(|| format!("Failed to launch browser for URL {}", url))?;
+            let Some(path) = browser else {
+                error!("Couldn't automatically detect the browser!");
+                return Ok(());
+            };
+
+            info!("Automatically found {:?}!", path);
+
+            browser_path.insert(path)
         }
-    } else {
-        Command::new(browser_path)
-            .stdout(Stdio::null())
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .args(vec![url])
-            .spawn()
-            .with_context(|| format!("Failed to launch browser for URL {}", url))?;
-    }
+    };
+
+    Command::new(&*browser_path)
+        .stdout(Stdio::null())
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .arg(url)
+        .spawn()
+        .with_context(|| {
+            format!("Failed to launch browser for URL {url} and browser {browser_path:?}")
+        })?;
+
     Ok(())
 }
 
@@ -528,42 +526,45 @@ pub fn main() -> Result<()> {
             }
         }
         ExecutionMode::Open => {
-            let config = read_config()?;
+            let Configuration {
+                mut browser_path,
+                custom_osu_path,
+            } = read_config()?;
+
             let client = reqwest::blocking::Client::new();
 
-            let mut found = false;
-            let mut path = config.custom_osu_path.unwrap_or("N/A".into());
-            if path == "N/A".to_string() || path.is_empty() {
-                let osu_path = get_exe_path("osu!.exe").unwrap_or_default();
-                if osu_path.exists() {
-                    found = true;
-                    path = osu_path.to_str().unwrap().to_string();
-                } else {
-                    if let Some(local_app_data) = get_local_app_data_path() {
-                        let default_osu_path = local_app_data.join("osu!").join("osu!.exe");
-                        if default_osu_path.exists() {
-                            found = true;
-                            path = default_osu_path.to_str().unwrap().to_string();
-                        }
+            let osu_path = match custom_osu_path {
+                Some(path) => Some(path),
+                None => {
+                    if let Some(osu_path) = get_exe_path("osu!.exe").filter(|path| path.exists()) {
+                        Some(osu_path)
+                    } else if let Some(local_app_data) = get_local_app_data_path() {
+                        let mut default_osu_path = local_app_data;
+                        default_osu_path.push("osu!/osu!.exe");
+
+                        default_osu_path.exists().then_some(default_osu_path)
+                    } else {
+                        None
                     }
                 }
-            }
+            };
 
-            if !found {
-                error!("Couldn't find osu!");
+            match osu_path {
+                Some(ref path) => info!("osu! path: {path:?}"),
+                None => error!("Couldn't find osu!"),
             }
-            info!("osu path! {}", &path);
 
             for url in options.urls {
-                if !found {
-                    open_link(config.browser_path.clone(), &url)?;
+                let Some(ref osu_path) = osu_path else {
+                    open_link(&mut browser_path, &url)?;
                     continue;
-                }
+                };
 
                 info!("Got a link! {}", &url);
+
                 if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
                     if beatmap.len() < 2 {
-                        open_link(config.browser_path.clone(), &url)?;
+                        open_link(&mut browser_path, &url)?;
                         continue;
                     }
 
@@ -574,8 +575,9 @@ pub fn main() -> Result<()> {
                         if head.status().is_success() {
                             info!("Got redirected!! {}", head.url());
                             let result = beatmap_regex.captures(head.url().as_str()).unwrap();
+
                             if result.len() < 2 {
-                                open_link(config.browser_path.clone(), &head.url().to_string())?;
+                                open_link(&mut browser_path, &head.url().to_string())?;
                                 continue;
                             }
 
@@ -588,15 +590,15 @@ pub fn main() -> Result<()> {
                     if let Ok(downloaded_beatmap) = download(beatmap_id.as_str()) {
                         info!("Saved the beatmap to: {:#?}", downloaded_beatmap);
 
-                        open_beatmap(&path, downloaded_beatmap);
+                        open_beatmap(osu_path, downloaded_beatmap)?;
                         continue;
                     } else {
                         // if the download failed, there is no reason to continue running
-                        open_link(config.browser_path.clone(), &url)?;
+                        open_link(&mut browser_path, &url)?;
                         continue;
                     }
                 } else {
-                    open_link(config.browser_path.clone(), &url)?;
+                    open_link(&mut browser_path, &url)?;
                 }
             }
         }

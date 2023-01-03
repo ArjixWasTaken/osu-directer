@@ -14,25 +14,34 @@ Big thanks to [Joergen Tjernoe](https://github.com/jorgenpt) for making [bichrom
 That's it!
 
 ## Configuration
+
 The configuration file is named `osu_directer.json` and is auto created in the same folder as the exe.
 
 This is the default config:
+
 ```json
 {
-  "browser_path": "auto",
-  "custom_osu_path": "auto"
+    "browser_path": "auto",
+    "custom_osu_path": "auto"
 }
 ```
 
 ### Config explanation
-- `browser_path` when left to `auto` will attempt to find firefox, chrome and msedge in that order. <br />
-When it is not `auto` it will use that as the browser. <br />
-Make sure it is the absolute path to an exe.
 
-- `custom_osu_path` if you did not install osu to a custom directory, just leave it empty or "auto". <br />
-An attempt to find the `osu!.exe` on PATH is made, but by default osu is not on PATH, if it is not on PATH and not in the default install location, then you must specify the absolute path to the `osu!.exe`
+-   `browser_path` when left to `auto` will attempt to find firefox, chrome and msedge in that order. <br />
+    When it is not `auto` it will use that as the browser. <br />
+    Make sure it is the absolute path to an exe.
+
+-   `custom_osu_path` if you did not install osu to a custom directory, just leave it empty or "auto". <br />
+    An attempt to find the `osu!.exe` on PATH is made, but by default osu is not on PATH, if it is not on PATH and not in the default install location, then you must specify the absolute path to the `osu!.exe`
 
 `osu_directer.json` is auto generated if it does not exist.
+
+# Contributors
+
+<a href="https://github.com/ArjixWasTaken/osu-directer/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ArjixWasTaken/osu-directer" />
+</a>
 
 ## License
 

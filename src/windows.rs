@@ -5,7 +5,7 @@ use log::{debug, error, info, trace};
 use regex::Regex;
 use reqwest::header::ACCEPT;
 use simplelog::*;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::ops::Index;
 use std::{
     fs::{File, OpenOptions},
@@ -262,9 +262,9 @@ fn get_exe_relative_path(filename: &str) -> io::Result<PathBuf> {
 }
 
 fn rotate_and_open_log(log_path: &Path) -> Result<File, io::Error> {
-    if let Ok(log_info) = std::fs::metadata(&log_path) {
+    if let Ok(log_info) = std::fs::metadata(log_path) {
         if log_info.len() > MAX_LOG_SIZE
-            && std::fs::rename(&log_path, log_path.with_extension("log.old")).is_err()
+            && std::fs::rename(log_path, log_path.with_extension("log.old")).is_err()
             && std::fs::remove_file(log_path).is_err()
         {
             return File::create(log_path);
@@ -396,9 +396,7 @@ fn try_download_kitsu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBu
 
 fn download(beatmap_set_id: &str) -> Result<PathBuf> {
     let download_dir = get_local_app_data_path()
-        .ok_or(anyhow::Error::msg(
-            "Couldn't find %localappdata%, which is impossible...",
-        ))?
+        .ok_or_else(|| anyhow::Error::msg("Couldn't find %localappdata%, which is impossible..."))?
         .join("osu!directer-beatmaps");
 
     if !download_dir.is_dir() {
@@ -406,11 +404,11 @@ fn download(beatmap_set_id: &str) -> Result<PathBuf> {
             .expect("Couldn't make a directory in %localappdata%, which is impossible?");
     }
 
-    if let Ok(chimu) = try_download_chimu(&beatmap_set_id, &download_dir) {
+    if let Ok(chimu) = try_download_chimu(beatmap_set_id, &download_dir) {
         return Ok(chimu);
     }
 
-    if let Ok(kitsu) = try_download_kitsu(&beatmap_set_id, &download_dir) {
+    if let Ok(kitsu) = try_download_kitsu(beatmap_set_id, &download_dir) {
         return Ok(kitsu);
     }
 
@@ -540,6 +538,7 @@ pub fn main() -> Result<()> {
                         Some(osu_path)
                     } else if let Some(local_app_data) = get_local_app_data_path() {
                         let default_osu_path = local_app_data.join("osu!/osu!.exe");
+
                         default_osu_path.exists().then_some(default_osu_path)
                     } else {
                         None
@@ -560,7 +559,7 @@ pub fn main() -> Result<()> {
 
                 info!("Got a link! {}", &url);
 
-                if let Some(beatmap) = beatmap_regex.captures(&url.trim()) {
+                if let Some(beatmap) = beatmap_regex.captures(url.trim()) {
                     if beatmap.len() < 2 {
                         open_link(&mut browser_path, &url)?;
                         continue;

@@ -3,6 +3,7 @@ use anyhow::{bail, Context, Result};
 use const_format::concatcp;
 use log::{debug, error, info, trace};
 use regex::Regex;
+use reqwest::blocking::Client;
 use reqwest::header::ACCEPT;
 use simplelog::*;
 use std::io::{Read, Write};
@@ -326,14 +327,18 @@ fn read_config() -> io::Result<Configuration> {
     })
 }
 
-fn try_download_chimu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBuf> {
+fn try_download_chimu(
+    client: &Client,
+    beatmapset_id: &str,
+    download_dir: &Path,
+) -> Result<PathBuf> {
     let download_link = format!("https://api.chimu.moe/v1/download/{}", beatmapset_id);
     info!(
         "    Attempting to download from chimu.moe - {}",
         download_link
     );
 
-    if let Ok(res) = reqwest::blocking::Client::new()
+    if let Ok(res) = client
         .get(download_link)
         .header(ACCEPT, "application/octet-strean")
         .send()
@@ -360,14 +365,18 @@ fn try_download_chimu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBu
     Err(anyhow::Error::msg("Could not download beatmap."))
 }
 
-fn try_download_kitsu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBuf> {
+fn try_download_kitsu(
+    client: &Client,
+    beatmapset_id: &str,
+    download_dir: &Path,
+) -> Result<PathBuf> {
     let download_link = format!("https://kitsu.moe/api/d/{}", beatmapset_id);
     info!(
         "    Attempting to download from kitsu.moe - {}",
         download_link
     );
 
-    if let Ok(res) = reqwest::blocking::Client::new()
+    if let Ok(res) = client
         .get(download_link)
         .header(ACCEPT, "application/octet-strean")
         .send()
@@ -394,7 +403,7 @@ fn try_download_kitsu(beatmapset_id: &str, download_dir: &Path) -> Result<PathBu
     Err(anyhow::Error::msg("Could not download beatmap."))
 }
 
-fn download(beatmap_set_id: &str) -> Result<PathBuf> {
+fn download(client: &Client, beatmap_set_id: &str) -> Result<PathBuf> {
     let download_dir = get_local_app_data_path()
         .ok_or(anyhow::Error::msg(
             "Couldn't find %localappdata%, which is impossible...",
@@ -406,11 +415,11 @@ fn download(beatmap_set_id: &str) -> Result<PathBuf> {
             .expect("Couldn't make a directory in %localappdata%, which is impossible?");
     }
 
-    if let Ok(chimu) = try_download_chimu(&beatmap_set_id, &download_dir) {
+    if let Ok(chimu) = try_download_chimu(client, &beatmap_set_id, &download_dir) {
         return Ok(chimu);
     }
 
-    if let Ok(kitsu) = try_download_kitsu(&beatmap_set_id, &download_dir) {
+    if let Ok(kitsu) = try_download_kitsu(client, &beatmap_set_id, &download_dir) {
         return Ok(kitsu);
     }
 
@@ -431,7 +440,7 @@ fn open_beatmap(osu_path: &PathBuf, beatmap: PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn open_link(browser_path: &mut Option<PathBuf>, url: &String) -> Result<()> {
+fn open_link(browser_path: &mut Option<PathBuf>, url: &str) -> Result<()> {
     info!("Opening link in browser! {}", url);
 
     let browser_path = match browser_path {
@@ -531,7 +540,7 @@ pub fn main() -> Result<()> {
                 custom_osu_path,
             } = read_config()?;
 
-            let client = reqwest::blocking::Client::new();
+            let client = Client::new();
 
             let osu_path = match custom_osu_path {
                 Some(path) => Some(path),
@@ -572,30 +581,28 @@ pub fn main() -> Result<()> {
                     if beatmap.index(1).eq("beatmaps") {
                         let head = client.head(&url).send()?;
 
-                        if head.status().is_success() {
-                            info!("Got redirected!! {}", head.url());
-                            let result = beatmap_regex.captures(head.url().as_str()).unwrap();
-
-                            if result.len() < 2 {
-                                open_link(&mut browser_path, &head.url().to_string())?;
-                                continue;
-                            }
-
-                            beatmap_id = result.index(2).to_string();
-                        } else {
+                        if !head.status().is_success() {
                             continue;
                         }
+
+                        info!("Got redirected!! {}", head.url());
+                        let result = beatmap_regex.captures(head.url().as_str()).unwrap();
+
+                        if result.len() < 2 {
+                            open_link(&mut browser_path, head.url().as_str())?;
+                            continue;
+                        }
+
+                        beatmap_id = result.index(2).to_string();
                     }
 
-                    if let Ok(downloaded_beatmap) = download(beatmap_id.as_str()) {
+                    if let Ok(downloaded_beatmap) = download(&client, beatmap_id.as_str()) {
                         info!("Saved the beatmap to: {:#?}", downloaded_beatmap);
 
                         open_beatmap(osu_path, downloaded_beatmap)?;
-                        continue;
                     } else {
                         // if the download failed, there is no reason to continue running
                         open_link(&mut browser_path, &url)?;
-                        continue;
                     }
                 } else {
                     open_link(&mut browser_path, &url)?;

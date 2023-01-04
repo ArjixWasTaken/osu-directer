@@ -22,6 +22,7 @@ reqwest = { version = "0.11.13", features = [ "blocking" ] }
 windows = { version = "0.35.0", features = [ "Storage", "Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging" ] }
 winres = "^0.1"
 regex = "1.7.0"
+osu-db = "0.3.0"
 
 [build-dependencies]
 winres = "^0.1"

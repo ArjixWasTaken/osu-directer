@@ -10,6 +10,7 @@
 #![cfg_attr(debug_assertions, windows_subsystem = "console")]
 
 mod config;
+mod utils;
 mod windows;
 
 use crate::windows as os;

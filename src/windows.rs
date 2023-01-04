@@ -538,6 +538,8 @@ pub fn main() -> Result<()> {
                 custom_osu_path,
             } = read_config()?;
 
+            use crate::utils::{get_all_beatmap_ids, get_all_beatmapset_ids};
+
             let client = Client::new();
 
             let osu_path = match custom_osu_path {
@@ -574,6 +576,7 @@ pub fn main() -> Result<()> {
                         continue;
                     }
 
+                    let osu_db = osu_path.parent().unwrap().join("osu!.db");
                     let mut beatmap_id = beatmap.index(2).to_string();
 
                     // The following links, point to a beatmap diff, not the beatmap itself
@@ -582,8 +585,17 @@ pub fn main() -> Result<()> {
                     //
                     // So we just make a head request, to get the beatmap id from the redirected url.
                     if vec!["b", "beatmaps"].contains(&beatmap.index(1)) {
-                        let head = client.head(&url).send()?;
+                        if osu_db.exists() {
+                            let beatmaps = get_all_beatmap_ids(osu_db.to_str().unwrap());
 
+                            // If the beatmap is already downloaded, this means that the user wants to open the browser.
+                            if beatmaps.contains(&beatmap_id.as_str().parse::<i32>().unwrap()) {
+                                open_link(&mut browser_path, &url)?;
+                                continue;
+                            }
+                        }
+
+                        let head = client.head(&url).send()?;
                         if !head.status().is_success() {
                             continue;
                         }
@@ -597,6 +609,16 @@ pub fn main() -> Result<()> {
                         }
 
                         beatmap_id = result.index(2).to_string();
+                    }
+
+                    if osu_db.exists() {
+                        let beatmaps = get_all_beatmapset_ids(osu_db.to_str().unwrap());
+
+                        // If the beatmap is already downloaded, this means that the user wants to open the browser.
+                        if beatmaps.contains(&beatmap_id.as_str().parse::<i32>().unwrap()) {
+                            open_link(&mut browser_path, &url)?;
+                            continue;
+                        }
                     }
 
                     if let Ok(downloaded_beatmap) = download(&client, beatmap_id.as_str()) {

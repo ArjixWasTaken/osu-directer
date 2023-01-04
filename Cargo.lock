@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "osu-directer"
-version = "1.2.3"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "const_format",

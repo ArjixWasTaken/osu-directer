@@ -1,6 +1,6 @@
 [package]
 name = "osu-directer"
-version = "1.2.3"
+version = "1.2.1"
 authors = ["ArjixWasTaken", "Jørgen P. Tjernø <jorgen@tjer.no>"]
 edition = "2021"
 license = "MIT"

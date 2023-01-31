@@ -23,6 +23,7 @@ windows = { version = "0.35.0", features = [ "Storage", "Win32_Foundation", "Win
 winres = "^0.1"
 regex = "1.7.0"
 osu-db = "0.3.0"
+which = "4.4.0"
 
 [build-dependencies]
 winres = "^0.1"

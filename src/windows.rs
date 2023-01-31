@@ -50,6 +50,10 @@ fn get_exe_path(exe_name: &str) -> Option<PathBuf> {
         }
     }
 
+    if let Ok(exe) = which::which(exe_name) {
+        return Some(exe);
+    }
+
     None
 }
 
@@ -490,6 +494,11 @@ pub fn main() -> Result<()> {
         );
     }
 
+    let Configuration {
+        mut browser_path,
+        custom_osu_path,
+    } = read_config()?;
+
     match mode {
         ExecutionMode::Register => {
             if options.dry_run {
@@ -533,11 +542,6 @@ pub fn main() -> Result<()> {
             }
         }
         ExecutionMode::Open => {
-            let Configuration {
-                mut browser_path,
-                custom_osu_path,
-            } = read_config()?;
-
             use crate::utils::{get_all_beatmap_ids, get_all_beatmapset_ids};
 
             let client = Client::new();

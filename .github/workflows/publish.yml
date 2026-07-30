@@ -14,8 +14,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -29,7 +29,7 @@ jobs:
         run: cargo build --release
 
       - name: Archive EXE
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-release
           path: |
@@ -39,34 +39,28 @@ jobs:
     name: Publish release
     needs: [ build_windows ]
     runs-on: ubuntu-latest
-    
+
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # We need fetch depth 0 to get all the tags for determining the previous tag in the changelog generation.
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           path: dist
 
+      - name: Rename asset
+        run: mv dist/Windows-release/osu-directer.exe dist/osu-directer-win64.exe
+
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: dist/Windows-release/osu-directer.exe
-          asset_name: osu-directer-win64.exe
-          asset_content_type: application/octet-stream
+          files: dist/osu-directer-win64.exe

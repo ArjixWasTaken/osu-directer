@@ -331,14 +331,14 @@ fn read_config() -> io::Result<Configuration> {
     })
 }
 
-fn try_download_chimu(
+fn try_download_nerinyan(
     client: &Client,
     beatmapset_id: &str,
     download_dir: &Path,
 ) -> Result<PathBuf> {
-    let download_link = format!("https://api.chimu.moe/v1/download/{}", beatmapset_id);
+    let download_link = format!("https://api.nerinyan.moe/d/{}?nv=true", beatmapset_id);
     info!(
-        "    Attempting to download from chimu.moe - {}",
+        "    Attempting to download from nerinyan.moe - {}",
         download_link
     );
 
@@ -349,34 +349,34 @@ fn try_download_chimu(
     {
         if res.status().as_u16() != 200 {
             error!(
-                "    Failed to download from chimu.moe - {}",
+                "    Failed to download from nerinyan.moe - {}",
                 res.status().to_string()
             );
             return Err(anyhow::Error::msg("Failed to download beatmap."));
         }
 
         let bytes = res.bytes()?;
-        let filename = download_dir.join(format!("{}_chimu.osz", beatmapset_id));
+        let filename = download_dir.join(format!("{}_nerinyan.osz", beatmapset_id));
         File::create(&filename)?.write_all(&bytes).expect("Shit");
 
-        info!("    Successfully downloaded beatmap from chimu.moe!");
+        info!("    Successfully downloaded beatmap from nerinyan.moe!");
 
         return Ok(filename);
     } else {
-        error!("    Failed to connect to chimu.moe, check your internet connection.")
+        error!("    Failed to connect to nerinyan.moe, check your internet connection.")
     }
 
     Err(anyhow::Error::msg("Could not download beatmap."))
 }
 
-fn try_download_kitsu(
+fn try_download_catboy(
     client: &Client,
     beatmapset_id: &str,
     download_dir: &Path,
 ) -> Result<PathBuf> {
-    let download_link = format!("https://kitsu.moe/api/d/{}", beatmapset_id);
+    let download_link = format!("https://catboy.best/d/{}", beatmapset_id);
     info!(
-        "    Attempting to download from kitsu.moe - {}",
+        "    Attempting to download from catboy.best - {}",
         download_link
     );
 
@@ -387,21 +387,59 @@ fn try_download_kitsu(
     {
         if res.status().as_u16() != 200 {
             error!(
-                "    Failed to download from kitsu.moe - {}",
+                "    Failed to download from catboy.best - {}",
                 res.status().to_string()
             );
             return Err(anyhow::Error::msg("Failed to download beatmap."));
         }
 
         let bytes = res.bytes()?;
-        let filename = download_dir.join(format!("{}_kitsu.osz", beatmapset_id));
+        let filename = download_dir.join(format!("{}_catboy.osz", beatmapset_id));
         File::create(&filename)?.write_all(&bytes).expect("Shit");
 
-        info!("    Successfully downloaded beatmap from kitsu.moe!");
+        info!("    Successfully downloaded beatmap from catboy.best!");
 
         return Ok(filename);
     } else {
-        error!("   Failed to connect to kitsu.moe, check your internet connection.")
+        error!("   Failed to connect to catboy.best, check your internet connection.")
+    }
+
+    Err(anyhow::Error::msg("Could not download beatmap."))
+}
+
+fn try_download_osudirect(
+    client: &Client,
+    beatmapset_id: &str,
+    download_dir: &Path,
+) -> Result<PathBuf> {
+    let download_link = format!("https://osu.direct/api/d/{}?noVideo=1", beatmapset_id);
+    info!(
+        "    Attempting to download from osu.direct - {}",
+        download_link
+    );
+
+    if let Ok(res) = client
+        .get(download_link)
+        .header(ACCEPT, "application/octet-strean")
+        .send()
+    {
+        if res.status().as_u16() != 200 {
+            error!(
+                "    Failed to download from osu.direct - {}",
+                res.status().to_string()
+            );
+            return Err(anyhow::Error::msg("Failed to download beatmap."));
+        }
+
+        let bytes = res.bytes()?;
+        let filename = download_dir.join(format!("{}_osudirect.osz", beatmapset_id));
+        File::create(&filename)?.write_all(&bytes).expect("Shit");
+
+        info!("    Successfully downloaded beatmap from osu.direct!");
+
+        return Ok(filename);
+    } else {
+        error!("   Failed to connect to osu.direct, check your internet connection.")
     }
 
     Err(anyhow::Error::msg("Could not download beatmap."))
@@ -417,12 +455,16 @@ fn download(client: &Client, beatmap_set_id: &str) -> Result<PathBuf> {
             .expect("Couldn't make a directory in %localappdata%, which is impossible?");
     }
 
-    if let Ok(chimu) = try_download_chimu(client, &beatmap_set_id, &download_dir) {
-        return Ok(chimu);
+    if let Ok(osudirect) = try_download_osudirect(client, &beatmap_set_id, &download_dir) {
+        return Ok(osudirect);
     }
 
-    if let Ok(kitsu) = try_download_kitsu(client, &beatmap_set_id, &download_dir) {
-        return Ok(kitsu);
+    if let Ok(nerinyan) = try_download_nerinyan(client, &beatmap_set_id, &download_dir) {
+        return Ok(nerinyan);
+    }
+
+    if let Ok(catboy) = try_download_catboy(client, &beatmap_set_id, &download_dir) {
+        return Ok(catboy);
     }
 
     Err(anyhow::Error::msg("Failed to download the beatmap set."))
